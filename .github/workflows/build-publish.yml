@@ -10,11 +10,11 @@ jobs:
             contents: write
         steps:
             - name: Checkout Repository
-              uses: actions/checkout@v4
-            - name: Set up Python 3.10
-              uses: actions/setup-python@v4
+              uses: actions/checkout@v6
+            - name: Set up Python 3.11
+              uses: actions/setup-python@v6
               with:
-                python-version: '3.10'
+                python-version: '3.11'
                 check-latest: true
             - name: Install pdm
               run: pip install pdm
