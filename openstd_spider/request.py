@@ -1,8 +1,10 @@
 import random
 import time
-from typing import IO, Callable, Optional
+from os import PathLike
+from typing import Callable, Optional
 
-from httpx import Client
+import aiofiles
+from httpx import AsyncClient
 
 from openstd_spider.schema import StdSearchResult
 
@@ -19,7 +21,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 
 class OpenstdDto:
     def __init__(self):
-        self.client = Client(
+        self._client = AsyncClient(
             headers={
                 "User-Agent": UA,
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
@@ -28,14 +30,14 @@ class OpenstdDto:
             follow_redirects=False,
         )
 
-    def get_std_meta(self, std_id: str) -> StdMetaFull:
+    async def get_std_meta(self, std_id: str) -> StdMetaFull:
         """获取标准元数据
         Args:
             std_id: 标准id
         Returns:
             StdMeta: 标准元数据
         """
-        resp = self.client.get(
+        resp = await self._client.get(
             "/newGbInfo",
             params={
                 "hcno": std_id,
@@ -44,7 +46,7 @@ class OpenstdDto:
         resp.raise_for_status()
         return openstd_parse_meta(resp.text)
 
-    def search(
+    async def search(
         self,
         keyword: str = "",
         std_status: StdStatus = StdStatus.ALL,
@@ -70,7 +72,7 @@ class OpenstdDto:
         Returns:
             StdSearchResult: 搜索结果
         """
-        resp = self.client.get(
+        resp = await self._client.get(
             "/std_list",
             params={
                 "r": random.random(),
@@ -91,7 +93,7 @@ class OpenstdDto:
 
 class Gb688Dto:
     def __init__(self):
-        self.client = Client(
+        self._client = AsyncClient(
             headers={
                 "User-Agent": UA,
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
@@ -100,14 +102,14 @@ class Gb688Dto:
             follow_redirects=False,
         )
 
-    def get_pages(self, std_id: str) -> list[Gb688Page]:
+    async def get_pages(self, std_id: str) -> list[Gb688Page]:
         """获取文档页
         Args:
             std_id: 标准id
         Returns:
             list[Gb688Page]: 页面结构数据
         """
-        resp = self.client.get(
+        resp = await self._client.get(
             "/showGb",
             params={
                 "type": "online",
@@ -118,16 +120,19 @@ class Gb688Dto:
             },
         )
         resp.raise_for_status()
-        return gb688_parse_page_sheet(resp.text)
+        pages = gb688_parse_page_sheet(resp.text)
+        if len(pages) == 0:
+            raise DownloadError
+        return pages
 
-    def get_pageimg(self, img_id: str) -> bytes:
+    async def get_pageimg(self, img_id: str) -> bytes:
         """获取文档页
         Args:
             img_id: 图片资源id
         Returns:
             bytes: 预览图片数据
         """
-        resp = self.client.get(
+        resp = await self._client.get(
             "/viewGbImg",
             params={
                 "fileName": img_id,
@@ -140,10 +145,10 @@ class Gb688Dto:
         resp.raise_for_status()
         return resp.content
 
-    def download_pdf(
+    async def download_pdf(
         self,
         std_id: str,
-        fp: IO,
+        path: PathLike,
         cb: Optional[Callable[[int, int], None]] = None,
     ):
         """下载pdf文件
@@ -152,7 +157,7 @@ class Gb688Dto:
           fp: 下载文件IO对象
           cb: 下载进度回调
         """
-        with self.client.stream(
+        async with self._client.stream(
             "GET",
             "/viewGb",
             params={
@@ -167,33 +172,35 @@ class Gb688Dto:
             ):
                 # 文件不为pdf
                 raise DownloadError
-            size = 0
-            for chunck in resp.iter_bytes(1024 * 100):
-                size += len(chunck)
-                fp.write(chunck)
-                if cb:
-                    cb(total_size, size)
+            async with aiofiles.open(path, "wb") as fp:
+                size = 0
+                async for chunck in resp.aiter_bytes(1024 * 100):
+                    size += len(chunck)
+                    await fp.write(chunck)
+                    if cb:
+                        cb(total_size, size)
 
-    def get_captcha(self) -> bytes:
+    async def get_captcha(self) -> bytes:
         """获取人机验证码
         Returns:
             bytes: 验证码图片数据
         """
-        resp = self.client.get(f"/gc?_{int(time.time() * 1000)}")
+        resp = await self._client.get(f"/gc?_{int(time.time() * 1000)}")
         resp.raise_for_status()
         return resp.content
 
-    def submit_captcha(self, code: str) -> bool:
+    async def submit_captcha(self, code: str) -> bool:
         """提交人机验证码
         Args:
             code: 验证码内容
         Returns:
             bool: 验证码是否正确
         """
-        resp = self.client.post(
+        resp = await self._client.post(
             "/verifyCode",
             data={
                 "verifyCode": code,
+                "agreeIECTips": "true",
             },
         )
         resp.raise_for_status()

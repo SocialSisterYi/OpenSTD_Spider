@@ -1,5 +1,8 @@
+import asyncio
+import inspect
 import sys
 from enum import Enum
+from functools import partial, wraps
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -34,7 +37,7 @@ from openstd_spider import (
     reorganize_page_impl,
 )
 from openstd_spider.parse.gb688 import gb688_uniq_imgid
-from openstd_spider.pdf import render_pdf_impl
+from openstd_spider.pdf import async_render_pdf_impl
 from openstd_spider.utils import (
     is_std_code,
     name2std_type,
@@ -42,9 +45,33 @@ from openstd_spider.utils import (
     std_status2name,
 )
 
+
+class AsyncTyper(Typer):
+    @staticmethod
+    def maybe_run_async(decorator, f):
+        if inspect.iscoroutinefunction(f):
+
+            @wraps(f)
+            def runner(*args, **kwargs):
+                return asyncio.run(f(*args, **kwargs))
+
+            decorator(runner)
+        else:
+            decorator(f)
+        return f
+
+    def callback(self, *args, **kwargs):
+        decorator = super().callback(*args, **kwargs)
+        return partial(self.maybe_run_async, decorator)
+
+    def command(self, *args, **kwargs):
+        decorator = super().command(*args, **kwargs)
+        return partial(self.maybe_run_async, decorator)
+
+
 console = Console(highlight=False)
 
-app = Typer(
+app = AsyncTyper(
     name="OpenSTD Spider",
     help=f"国家标准全文公开系统下载工具  Version: {__version__}",
     add_completion=False,
@@ -55,9 +82,9 @@ openstd_dto = OpenstdDto()
 gb688_dto = Gb688Dto()
 
 
-def search_one(keyword: str) -> StdListItem:
+async def search_one(keyword: str) -> StdListItem:
     "搜索精确标准编号信息"
-    result = openstd_dto.search(
+    result = await openstd_dto.search(
         keyword=keyword,
     )
     item_cnt = len(result.items)
@@ -71,11 +98,11 @@ def search_one(keyword: str) -> StdListItem:
         sys.exit(-1)
 
 
-def url_or_code2std_id(target: str) -> str:
+async def url_or_code2std_id(target: str) -> str:
     "通过url或精确标准编号得到标准id"
     target = target.strip()
     if is_std_code(target):
-        result = search_one(target)
+        result = await search_one(target)
         std_id = result.id
     else:
         std_id = parse_std_id(target)
@@ -169,15 +196,14 @@ def show_std_meta(meta: StdMetaFull, detail: bool = True):
         console.print(f"[bold green]英文名称:[/] {meta.name_en}")
 
 
-def download_preview(std_id: str, download_path: Path):
+async def download_preview(std_id: str, download_path: Path):
     "预览页面方式下载"
-    page_infos = gb688_dto.get_pages(std_id)
+    page_infos = await gb688_dto.get_pages(std_id)
     img_ids = gb688_uniq_imgid(page_infos)
     page_cnt = len(page_infos)
     img_cnt = len(img_ids)
 
     with (
-        download_path.open("wb") as fp,
         TemporaryDirectory(prefix="openstdspider") as tmp_dir,
         Progress(
             TextColumn("[progress.description]{task.description}"),
@@ -192,7 +218,7 @@ def download_preview(std_id: str, download_path: Path):
         tmp_dir = Path(tmp_dir)
 
         bar1 = progress.add_task("缓存预览图", total=img_cnt)
-        download_preview_img_impl(
+        await download_preview_img_impl(
             gb688_dto,
             tmp_dir,
             img_ids,
@@ -202,7 +228,7 @@ def download_preview(std_id: str, download_path: Path):
         console.print(f"[green]✔ [bold green]预览图缓存完毕")
 
         bar2 = progress.add_task("重建页面", total=page_cnt)
-        reorganize_page_impl(
+        await reorganize_page_impl(
             page_infos,
             tmp_dir,
             lambda cnt: progress.update(bar2, completed=cnt),
@@ -211,33 +237,30 @@ def download_preview(std_id: str, download_path: Path):
         console.print(f"[green]✔ [bold green]页面重建完毕")
 
         bar3 = progress.add_task("生成PDF", total=page_cnt)
-        render_pdf_impl(
+        await async_render_pdf_impl(
             page_infos,
             tmp_dir,
-            fp,
+            download_path,
             lambda cnt: progress.update(bar3, completed=cnt),
         )
         progress.remove_task(bar3)
         console.print(f"[green]✔ [bold green]pdf生成完毕")
 
 
-def download_file(std_id: str, download_path: Path):
+async def download_file(std_id: str, download_path: Path):
     "文件方式下载"
-    with (
-        download_path.open("wb") as fp,
-        Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            DownloadColumn(binary_units=True),
-            TaskProgressColumn(),
-            TimeRemainingColumn(),
-            console=console,
-        ) as progress,
-    ):
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        DownloadColumn(binary_units=True),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        console=console,
+    ) as progress:
         bar = progress.add_task("下载PDF")
-        gb688_dto.download_pdf(
+        await gb688_dto.download_pdf(
             std_id,
-            fp,
+            download_path,
             lambda total_size, size: progress.update(
                 bar, total=total_size, completed=size
             ),
@@ -258,7 +281,7 @@ class StdTypeSelect(Enum):
 
 
 @app.command(name="search")
-def search(
+async def search(
     ps: int = Option(10, "--ps", show_default=False, help="每页条数", min=10, max=50),
     pn: int = Option(1, "-p", "--pn", show_default=False, help="页码", min=1),
     std_status: StdStatusSelect | None = Option(
@@ -271,7 +294,7 @@ def search(
     keyword: str = Argument("", help="关键字"),
 ):
     "搜索 浏览标准文件列表"
-    result = openstd_dto.search(
+    result = await openstd_dto.search(
         keyword=keyword,
         std_type=StdType(name2std_type(std_type.name)) if std_type else StdType.ALL,
         std_status=StdStatus(std_status.name) if std_status else StdStatus.ALL,
@@ -285,14 +308,14 @@ def search(
 
 
 @app.command(name="info")
-def meta_info(
+async def meta_info(
     json_output: bool = Option(False, "-j", "--json", help="json格式输出"),
     target: str = Argument(help="标准编号或url", show_default=False),
 ):
     "查询标准文件元数据"
-    std_id = url_or_code2std_id(target)
+    std_id = await url_or_code2std_id(target)
     try:
-        meta = openstd_dto.get_std_meta(std_id)
+        meta = await openstd_dto.get_std_meta(std_id)
     except NotFoundError:
         console.print(f"❌[red]目标资源id不存在")
         sys.exit(-1)
@@ -303,7 +326,7 @@ def meta_info(
 
 
 @app.command(name="download")
-def download(
+async def download(
     detail: bool = Option(False, "-d", "--detail", help="是否展示详细元数据"),
     force_preview: bool = Option(False, "--preview", help="强制下载预览版本"),
     download_path: Path | None = Option(
@@ -315,9 +338,9 @@ def download(
     if download_path is None:
         download_path = Path(".")
 
-    std_id = url_or_code2std_id(target)
+    std_id = await url_or_code2std_id(target)
     try:
-        meta = openstd_dto.get_std_meta(std_id)
+        meta = await openstd_dto.get_std_meta(std_id)
     except NotFoundError:
         console.print(f"❌[bold red]目标资源id不存在")
         sys.exit(-1)
@@ -327,7 +350,7 @@ def download(
 
     if meta.allow_download or meta.allow_preview:
         try:
-            fuck_captcha_impl(gb688_dto)
+            await fuck_captcha_impl(gb688_dto)
         except HandleCaptchaError:
             console.print(f"[red]× [bold red]验证码识别失败")
             sys.exit(-1)
@@ -342,12 +365,12 @@ def download(
 
     if meta.allow_download and not force_preview:
         # 文件下载
-        download_file(std_id, download_path)
+        await download_file(std_id, download_path)
     elif meta.allow_preview:
         # 预览下载
         console.print(
             f"[yellow]! [bold yellow]不允许直接下载, 进行预览方式合并重组下载"
         )
-        download_preview(std_id, download_path)
+        await download_preview(std_id, download_path)
 
     console.print(f"[green]✔ [bold green]下载完成")

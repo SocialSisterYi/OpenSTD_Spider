@@ -155,3 +155,4 @@ cython_debug/
 
 .pdm-python
 .vscode
+.DS_Store

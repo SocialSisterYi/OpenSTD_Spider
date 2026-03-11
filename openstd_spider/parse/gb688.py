@@ -8,8 +8,10 @@ from bs4 import BeautifulSoup
 
 from ..schema import Gb688Block, Gb688Page
 
+
 def gb688_uniq_imgid(page_infos: list[Gb688Page]) -> set[str]:
     return set(page_info.img_id for page_info in page_infos)
+
 
 def gb688_parse_page_sheet(html_text: str) -> list[Gb688Page]:
     """解析页面和图块表"""

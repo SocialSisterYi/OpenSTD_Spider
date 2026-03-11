@@ -1,5 +1,7 @@
+import asyncio
+from os import PathLike
 from pathlib import Path
-from typing import IO, Callable, Optional
+from typing import Callable, Optional
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
@@ -8,15 +10,24 @@ from reportlab.pdfgen.canvas import Canvas
 from .parse.gb688 import Gb688Page
 
 
+async def async_render_pdf_impl(
+    page_infos: list[Gb688Page],
+    base_dir: Path,
+    pdf_path: PathLike,
+    cb: Optional[Callable[[int], None]] = None,
+):
+    await asyncio.to_thread(render_pdf_impl, page_infos, base_dir, pdf_path, cb)
+
+
 def render_pdf_impl(
     page_infos: list[Gb688Page],
     base_dir: Path,
-    pdf_file: IO,
+    pdf_path: PathLike,
     cb: Optional[Callable[[int], None]] = None,
 ):
     """渲染为PDF"""
     page_cnt = len(page_infos)
-    pdf = Canvas(pdf_file, pagesize=A4)
+    pdf = Canvas(str(pdf_path), pagesize=A4)
     page_w, page_h = A4
 
     for idx, page in enumerate(page_infos, 1):
