@@ -2,9 +2,7 @@ import re
 
 from .schema import StdStatus, StdType
 
-PATT_STD_ID_URL = re.compile(
-    r"^(?:https://openstd\.samr\.gov\.cn/bzgk/gb/newGbInfo\?hcno=)?([0-9A-F]{32})"
-)
+PATT_STD_ID_URL = re.compile(r"^(?:https://openstd\.samr\.gov\.cn/bzgk/gb/newGbInfo\?hcno=)?([0-9A-F]{32})")
 
 PATT_STD_CODE = re.compile(r"^GB(/[TZ])? \S+", re.I)
 

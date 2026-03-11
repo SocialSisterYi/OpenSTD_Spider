@@ -43,8 +43,8 @@ class StdMeta:
     is_ref: bool
     name_cn: str
     status: StdStatus = field(metadata=config(encoder=lambda x: x.value))
-    pub_date: date = field(metadata=config(encoder=lambda x: x.isoformat()))
-    impl_date: date = field(metadata=config(encoder=lambda x: x.isoformat()))
+    pub_date: None | date = field(metadata=config(encoder=lambda x: x.isoformat() if x else None))
+    impl_date: None | date = field(metadata=config(encoder=lambda x: x.isoformat() if x else None))
 
 
 @dataclass

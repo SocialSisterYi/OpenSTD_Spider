@@ -116,7 +116,7 @@ class Gb688Dto:
                 "hcno": std_id,
             },
             headers={
-                "Referer": f"https://openstd.samr.gov.cn/bzgk/gb/newGbInfo?hcno={std_id}"
+                "Referer": f"https://openstd.samr.gov.cn/bzgk/gb/newGbInfo?hcno={std_id}",
             },
         )
         resp.raise_for_status()
@@ -166,10 +166,7 @@ class Gb688Dto:
         ) as resp:
             resp.raise_for_status()
             total_size = int(resp.headers.get("Content-Length", 0))
-            if (
-                not resp.headers.get("Content-Disposition", "").endswith(".pdf")
-                and total_size != 0
-            ):
+            if not resp.headers.get("Content-Disposition", "").endswith(".pdf") and total_size != 0:
                 # 文件不为pdf
                 raise DownloadError
             async with aiofiles.open(path, "wb") as fp:

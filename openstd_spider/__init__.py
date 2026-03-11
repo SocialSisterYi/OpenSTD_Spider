@@ -8,14 +8,7 @@ from .captcha import fuck_captcha
 from .exception import HandleCaptchaError, NotFoundError
 from .parse.gb688 import gb688_reorganize_page
 from .request import Gb688Dto, OpenstdDto
-from .schema import (
-    Gb688Page,
-    StdListItem,
-    StdMetaFull,
-    StdSearchResult,
-    StdStatus,
-    StdType,
-)
+from .schema import Gb688Page, StdListItem, StdMetaFull, StdSearchResult, StdStatus, StdType
 
 __version__ = "0.1.0"
 

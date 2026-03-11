@@ -9,14 +9,7 @@ from tempfile import TemporaryDirectory
 from rich.box import SQUARE
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    Progress,
-    TaskProgressColumn,
-    TextColumn,
-    TimeRemainingColumn,
-)
+from rich.progress import BarColumn, DownloadColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 from rich.styled import Styled
 from rich.table import Table
 from typer import Argument, Option, Typer
@@ -38,12 +31,7 @@ from openstd_spider import (
 )
 from openstd_spider.parse.gb688 import gb688_uniq_imgid
 from openstd_spider.pdf import async_render_pdf_impl
-from openstd_spider.utils import (
-    is_std_code,
-    name2std_type,
-    parse_std_id,
-    std_status2name,
-)
+from openstd_spider.utils import is_std_code, name2std_type, parse_std_id, std_status2name
 
 
 class AsyncTyper(Typer):
@@ -134,13 +122,11 @@ def show_std_list(result: StdSearchResult):
             Styled(item.std_code, "bold green"),
             item.name_cn,
             std_status_colored(item.status),
-            item.pub_date.strftime("%Y-%m-%d"),
-            item.impl_date.strftime("%Y-%m-%d"),
+            item.pub_date.strftime("%Y-%m-%d") if item.pub_date else "无",
+            item.impl_date.strftime("%Y-%m-%d") if item.impl_date else "无",
         )
     console.print(tb)
-    console.print(
-        f"[bold green]{result.page}/{result.total_page}[/]页 共[bold green]{result.total_item}[/]条"
-    )
+    console.print(f"[bold green]{result.page}/{result.total_page}[/]页 共[bold green]{result.total_item}[/]条")
 
 
 def show_std_meta(meta: StdMetaFull, detail: bool = True):
@@ -149,8 +135,7 @@ def show_std_meta(meta: StdMetaFull, detail: bool = True):
         grid = Table(show_header=False, show_edge=False, padding=0)
         panel = Panel(
             grid,
-            title=f"[red]标准号: {meta.std_code}"
-            + ("  [bold yellow]采" if meta.is_ref else ""),
+            title=f"[red]标准号: {meta.std_code}" + ("  [bold yellow]采" if meta.is_ref else ""),
             box=SQUARE,
             title_align="left",
             border_style="blue",
@@ -180,8 +165,14 @@ def show_std_meta(meta: StdMetaFull, detail: bool = True):
         tb2 = Table(show_header=False, show_edge=False, padding=0)
         tb2.add_row("[bold white]中国标准分类号（CCS）", meta.ccs)
         tb2.add_row("[bold white]国际标准分类号（ICS）", meta.ics)
-        tb2.add_row("[bold white]发布日期", meta.pub_date.strftime("%Y-%m-%d"))
-        tb2.add_row("[bold white]实施日期", meta.impl_date.strftime("%Y-%m-%d"))
+        tb2.add_row(
+            "[bold white]发布日期",
+            meta.pub_date.strftime("%Y-%m-%d") if meta.pub_date else "无",
+        )
+        tb2.add_row(
+            "[bold white]实施日期",
+            meta.impl_date.strftime("%Y-%m-%d") if meta.impl_date else "无",
+        )
         tb2.add_row("[bold white]主管部门", meta.maintenance_depat)
         tb2.add_row("[bold white]归口部门", meta.centralized_depat)
         tb2.add_row("[bold white]发布单位", meta.pub_depat)
@@ -208,9 +199,7 @@ async def download_preview(std_id: str, download_path: Path):
         Progress(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
-            TaskProgressColumn(
-                "[progress.percentage]{task.percentage:>3.0f}%[/] {task.completed}/{task.total}"
-            ),
+            TaskProgressColumn("[progress.percentage]{task.percentage:>3.0f}%[/] {task.completed}/{task.total}"),
             TimeRemainingColumn(),
             console=console,
         ) as progress,
@@ -261,9 +250,7 @@ async def download_file(std_id: str, download_path: Path):
         await gb688_dto.download_pdf(
             std_id,
             download_path,
-            lambda total_size, size: progress.update(
-                bar, total=total_size, completed=size
-            ),
+            lambda total_size, size: progress.update(bar, total=total_size, completed=size),
         )
         progress.remove_task(bar)
 
@@ -284,12 +271,8 @@ class StdTypeSelect(Enum):
 async def search(
     ps: int = Option(10, "--ps", show_default=False, help="每页条数", min=10, max=50),
     pn: int = Option(1, "-p", "--pn", show_default=False, help="页码", min=1),
-    std_status: StdStatusSelect | None = Option(
-        None, "-s", "--status", show_default=False, help="标准状态"
-    ),
-    std_type: StdTypeSelect | None = Option(
-        None, "-t", "--type", show_default=False, help="标准类型"
-    ),
+    std_status: StdStatusSelect | None = Option(None, "-s", "--status", show_default=False, help="标准状态"),
+    std_type: StdTypeSelect | None = Option(None, "-t", "--type", show_default=False, help="标准类型"),
     json_output: bool = Option(False, "-j", "--json", help="json格式输出"),
     keyword: str = Argument("", help="关键字"),
 ):
@@ -368,9 +351,7 @@ async def download(
         await download_file(std_id, download_path)
     elif meta.allow_preview:
         # 预览下载
-        console.print(
-            f"[yellow]! [bold yellow]不允许直接下载, 进行预览方式合并重组下载"
-        )
+        console.print(f"[yellow]! [bold yellow]不允许直接下载, 进行预览方式合并重组下载")
         await download_preview(std_id, download_path)
 
     console.print(f"[green]✔ [bold green]下载完成")

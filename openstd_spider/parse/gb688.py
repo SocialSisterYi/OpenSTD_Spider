@@ -21,9 +21,7 @@ def gb688_parse_page_sheet(html_text: str) -> list[Gb688Page]:
         page_blocks = []
         for block in page.select('span[class^="pdfImg"]'):
             _, block_x, block_y = block["class"][0].split("-")
-            style_matches = re.search(
-                r"background-position: *-(\d+)px +-(\d+)px", block["style"]
-            )
+            style_matches = re.search(r"background-position: *-(\d+)px +-(\d+)px", block["style"])
             page_blocks.append(
                 Gb688Block(
                     x=int(block_x),

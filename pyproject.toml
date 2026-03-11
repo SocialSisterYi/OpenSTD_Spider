@@ -25,3 +25,6 @@ scripts = { openstd_spider = "openstd_spider.__main__:app" }
 
 [tool.pdm]
 distribution = true
+
+[tool.black]
+line-length = 120
