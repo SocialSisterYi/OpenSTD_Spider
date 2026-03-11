@@ -10,7 +10,7 @@ from .parse.gb688 import gb688_reorganize_page
 from .request import Gb688Dto, OpenstdDto
 from .schema import Gb688Page, StdListItem, StdMetaFull, StdSearchResult, StdStatus, StdType
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 
 async def fuck_captcha_impl(dto: Gb688Dto):
