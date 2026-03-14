@@ -26,6 +26,8 @@ def std_status2name(std_status: StdStatus) -> str | None:
             return "即将实施"
         case StdStatus.WITHDRAWN:
             return "废止"
+        case StdStatus.NOTIMP:
+            return "暂不实施"
         case _:
             return None
 
@@ -38,6 +40,8 @@ def name2std_status(name: str) -> StdStatus | None:
             return StdStatus.TOBEIMP
         case "废止":
             return StdStatus.WITHDRAWN
+        case "暂不实施":
+            return StdStatus.NOTIMP
         case _:
             return None
 

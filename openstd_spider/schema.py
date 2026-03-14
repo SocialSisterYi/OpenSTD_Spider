@@ -27,6 +27,7 @@ class StdStatus(Enum):
     PUBLISHED = "PUBLISHED"
     TOBEIMP = "TOBEIMP"
     WITHDRAWN = "WITHDRAWN"
+    NOTIMP = "NOTIMP"
 
 
 class StdType(Enum):

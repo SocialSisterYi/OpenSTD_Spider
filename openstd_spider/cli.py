@@ -107,7 +107,7 @@ def std_status_colored(status: StdStatus):
             color = "green"
         case StdStatus.TOBEIMP:
             color = "yellow"
-        case StdStatus.WITHDRAWN:
+        case StdStatus.WITHDRAWN | StdStatus.NOTIMP:
             color = "red"
     return Styled(std_status2name(status), color)
 
