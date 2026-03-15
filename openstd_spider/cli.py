@@ -5,7 +5,7 @@ from enum import Enum
 from functools import partial, wraps
 from pathlib import Path
 from tempfile import TemporaryDirectory
-
+from pypdf import PdfReader, PdfWriter
 from rich.box import SQUARE
 from rich.console import Console
 from rich.panel import Panel
@@ -253,6 +253,14 @@ async def download_file(std_id: str, download_path: Path):
             lambda total_size, size: progress.update(bar, total=total_size, completed=size),
         )
         progress.remove_task(bar)
+        
+    reader = PdfReader(download_path)
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    writer.metadata = None
+    with download_path.open("wb") as output_pdf:
+        writer.write(output_pdf)
 
 
 class StdStatusSelect(Enum):
