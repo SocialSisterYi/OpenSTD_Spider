@@ -20,6 +20,16 @@ def openstd_parse_meta(html_text: str) -> StdMetaFull:
     _, std_code = std_code[0].split("标准号：")
     std_code = std_code.strip()
 
+    if tag_pub_date := tag3[1].find(string=lambda x: "发布日期" in x):
+        tag_pub_date = tag_pub_date.find_next().string.strip() or None
+    else:
+        tag_pub_date = None
+
+    if tag_impl_date := tag3[1].find(string=lambda x: "实施日期" in x):
+        tag_impl_date = tag_impl_date.find_next().string.strip() or None
+    else:
+        tag_impl_date = None
+
     return StdMetaFull(
         std_code=std_code,
         is_ref=is_ref,
@@ -28,16 +38,8 @@ def openstd_parse_meta(html_text: str) -> StdMetaFull:
         status=name2std_status(tag2.select_one("tr:nth-of-type(3) td span").string.strip()),
         allow_preview=tag2.select_one("tr:nth-of-type(4) button.ck_btn") is not None,
         allow_download=tag2.select_one("tr:nth-of-type(4) button.xz_btn") is not None,
-        pub_date=(
-            date.fromisoformat(tag3[1].find(string=lambda x: "发布日期" in x).find_next().string.strip())
-            if tag3[1].find(string=lambda x: "发布日期" in x)
-            else None
-        ),
-        impl_date=(
-            date.fromisoformat(tag3[1].find(string=lambda x: "实施日期" in x).find_next().string.strip())
-            if tag3[1].find(string=lambda x: "实施日期" in x)
-            else None
-        ),
+        pub_date=date.fromisoformat(tag_pub_date) if tag_pub_date else None,
+        impl_date=date.fromisoformat(tag_impl_date) if tag_impl_date else None,
         ccs=tag3[0].find(string=lambda x: "中国标准分类号（CCS）" in x).find_next().string.strip(),
         ics=tag3[0].find(string=lambda x: "国际标准分类号（ICS）" in x).find_next().string.strip(),
         maintenance_depat=tag3[2].find(string=lambda x: "主管部门" in x).find_next().string.strip(),
@@ -52,8 +54,8 @@ def openstd_parse_search_result(html_text: str) -> StdSearchResult:
     html = BeautifulSoup(html_text, "lxml")
     table = html.select("table.result_list>tbody:nth-of-type(2)>tr")
     for row in table:
-        pub_date = row.select_one("td:nth-of-type(7)").string.strip()
-        impl_date = row.select_one("td:nth-of-type(8)").string.strip()
+        pub_date = (row.select_one("td:nth-of-type(7)").string or "").strip()
+        impl_date = (row.select_one("td:nth-of-type(8)").string or "").strip()
         items.append(
             StdListItem(
                 id=row.select_one("td:nth-of-type(2)>a")["onclick"][10:-3],
