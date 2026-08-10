@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from bs4 import BeautifulSoup
@@ -5,6 +6,12 @@ from bs4 import BeautifulSoup
 from ..exception import NotFoundError
 from ..schema import StdListItem, StdMetaFull, StdSearchResult, StdStatus
 from ..utils import name2std_status
+
+# 列表页语义解析用的正则与关键词（openstd 站点列表的列数/列序不稳定，按内容而非列下标提取）
+HCNO_RE = re.compile(r"'([0-9A-Fa-f]{16,})'")
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+PAGE_RE = re.compile(r"共\s*(\d+)\s*条\s*标准\s*(\d+)\s*/\s*(\d+)")
+STATUS_KEYWORDS = ("现行", "即将实施", "废止", "暂不实施")
 
 
 def openstd_parse_meta(html_text: str) -> StdMetaFull:
@@ -21,12 +28,14 @@ def openstd_parse_meta(html_text: str) -> StdMetaFull:
     std_code = std_code.strip()
 
     if tag_pub_date := tag3[1].find(string=lambda x: "发布日期" in x):
-        tag_pub_date = tag_pub_date.find_next().string.strip() or None
+        tag_pub_date = tag_pub_date.find_next().get_text(strip=True)
+        tag_pub_date = m.group(0) if (m := DATE_RE.search(tag_pub_date)) else None
     else:
         tag_pub_date = None
 
     if tag_impl_date := tag3[1].find(string=lambda x: "实施日期" in x):
-        tag_impl_date = tag_impl_date.find_next().string.strip() or None
+        tag_impl_date = tag_impl_date.find_next().get_text(strip=True)
+        tag_impl_date = m.group(0) if (m := DATE_RE.search(tag_impl_date)) else None
     else:
         tag_impl_date = None
 
@@ -50,29 +59,78 @@ def openstd_parse_meta(html_text: str) -> StdMetaFull:
 
 
 def openstd_parse_search_result(html_text: str) -> StdSearchResult:
-    items = []
+    """解析标准列表页。
+
+    openstd 站点的列表表格列数与列序并不稳定（不同查询可能返回 8 列或 10 列，
+    "采标/标准性质"等列会动态增减），因此这里不依赖固定的列下标，而是按内容
+    语义提取：
+    - 标准号：以 "GB" 开头的 <a> 文本
+    - 名称：同一行内另一个带 onclick 的 <a> 文本
+    - id(hcno)：从 <a onclick="showInfo('HCNO')"> 中正则提取
+    - 日期：行内所有 YYYY-MM-DD，按出现顺序前两个依次为发布/实施日期
+    - 状态：<span> 文本命中状态关键词
+    - 是否采标：某单元格文本恰为 "采"
+    """
+    items: list[StdListItem] = []
     html = BeautifulSoup(html_text, "lxml")
-    table = html.select("table.result_list>tbody:nth-of-type(2)>tr")
-    for row in table:
-        pub_date = (row.select_one("td:nth-of-type(7)").string or "").strip()
-        impl_date = (row.select_one("td:nth-of-type(8)").string or "").strip()
+    for row in html.select("table.result_list>tbody:nth-of-type(2)>tr"):
+        tds = row.find_all("td")
+        hcno = None
+        std_code = None
+        name_cn = None
+        for td in tds:
+            a = td.find("a", attrs={"onclick": True})
+            if a is None:
+                continue
+            m = HCNO_RE.search(a.get("onclick", ""))
+            if m:
+                hcno = m.group(1)
+            text = a.get_text(strip=True)
+            if not text:
+                continue
+            if std_code is None and text.startswith("GB"):
+                std_code = text
+            elif name_cn is None:
+                name_cn = text
+        # 行内所有日期，按出现顺序前两个为发布/实施日期
+        dates = DATE_RE.findall(row.get_text())
+        pub_date = dates[0] if len(dates) >= 1 else ""
+        impl_date = dates[1] if len(dates) >= 2 else ""
+        # 状态：<span> 文本命中关键词
+        status_text = next(
+            (s.get_text(strip=True) for s in row.find_all("span") if s.get_text(strip=True) in STATUS_KEYWORDS),
+            "",
+        )
+        # 采标：某单元格文本恰为 "采"
+        is_ref = any(td.get_text(strip=True) == "采" for td in tds)
+
+        if std_code is None:
+            # 异常行（没有标准号），跳过
+            continue
+
         items.append(
             StdListItem(
-                id=row.select_one("td:nth-of-type(2)>a")["onclick"][10:-3],
-                std_code=row.select_one("td:nth-of-type(2)>a").string.strip(),
-                is_ref=row.select_one("td:nth-of-type(3)>span") is not None,
-                name_cn=row.select_one("td:nth-of-type(4)>a").string.strip(),
-                status=StdStatus(name2std_status(row.select_one("td:nth-of-type(6)>span").string.strip())),
+                id=hcno or "",
+                std_code=std_code,
+                is_ref=is_ref,
+                name_cn=name_cn or "",
+                # ALL 仅作 dataclass 必填占位：列表项不存在全部状态,正常必命中状态关键词
+                status=name2std_status(status_text) or StdStatus.ALL,
                 pub_date=date.fromisoformat(pub_date) if pub_date else None,
                 impl_date=date.fromisoformat(impl_date) if impl_date else None,
             )
         )
-    tag = html.select_one("div.hidden-xs>table>tr>td:nth-of-type(1)>span")
-    tag2 = list(tag.strings)
+
+    # 分页信息，形如 "共 70494 条标准 1 / 7050"
+    paging_node = html.select_one("div.hidden-xs")
+    paging_text = paging_node.get_text(" ", strip=True) if paging_node else html.get_text(" ", strip=True)
+    total_item = page = total_page = 0
+    if m := PAGE_RE.search(paging_text):
+        total_item, page, total_page = int(m.group(1)), int(m.group(2)), int(m.group(3))
 
     return StdSearchResult(
         items=items,
-        total_item=int(tag2[8].strip()),
-        page=int(tag2[11].strip()),
-        total_page=int(tag2[12][3:].strip()),
+        total_item=total_item,
+        page=page,
+        total_page=total_page,
     )

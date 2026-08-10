@@ -13,6 +13,6 @@ def fuck_captcha(captcha_img: bytes) -> str:
     img = cv2.bitwise_not(img)
 
     _, img_data = cv2.imencode(".png", img)
-    code = ocr.classification(img_data.tostring())
+    code = ocr.classification(img_data.tobytes())
 
     return code

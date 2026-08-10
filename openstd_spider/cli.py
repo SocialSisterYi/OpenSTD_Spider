@@ -114,13 +114,14 @@ def std_status_colored(status: StdStatus):
 
 def show_std_list(result: StdSearchResult):
     "输出标准搜索列表"
-    tb = Table("序号", "标准编号", "标准名", "状态", "发布日期", "实施日期")
+    tb = Table("序号", "标准编号", "标准名", "采标", "状态", "发布日期", "实施日期")
     tb.columns[2].overflow = "fold"
     for idx, item in enumerate(result.items):
         tb.add_row(
             str(idx),
             Styled(item.std_code, "bold green"),
             item.name_cn,
+            "是" if item.is_ref else "否",
             std_status_colored(item.status),
             item.pub_date.strftime("%Y-%m-%d") if item.pub_date else "无",
             item.impl_date.strftime("%Y-%m-%d") if item.impl_date else "无",
@@ -259,6 +260,7 @@ class StdStatusSelect(Enum):
     PUBLISHED = "现行"
     TOBEIMP = "即将实施"
     WITHDRAWN = "废止"
+    NOTIMP = "暂不实施"
 
 
 class StdTypeSelect(Enum):
@@ -333,6 +335,9 @@ async def download(
 
     if meta.allow_download or meta.allow_preview:
         try:
+            # 直接下载需先访问中转页种 token,预览方式不需要
+            if meta.allow_download and not force_preview:
+                await gb688_dto.prepare_download(std_id)
             await fuck_captcha_impl(gb688_dto)
         except HandleCaptchaError:
             console.print(f"[red]× [bold red]验证码识别失败")
